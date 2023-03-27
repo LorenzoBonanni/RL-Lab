@@ -21,23 +21,6 @@ def epsilon_greedy(q, state, epsilon):
 	return q[state].argmax()
 
 
-def epsilon_greedy(q, state, epsilon):
-	"""
-	Epsilon-greedy action selection function
-	
-	Args:
-		q: q table
-		state: agent's current state
-		epsilon: epsilon parameter
-	
-	Returns:
-		action id
-	"""
-	if numpy.random.random() < epsilon:
-		return numpy.random.choice(q.shape[1])
-	return q[state].argmax()
-
-
 def q_learning(environment, episodes, alpha, gamma, expl_func, expl_param):
 	"""
 	Performs the Q-Learning algorithm for a specific environment
@@ -57,9 +40,20 @@ def q_learning(environment, episodes, alpha, gamma, expl_func, expl_param):
 	q = numpy.zeros((environment.observation_space, environment.action_space))  # Q(s, a)
 	rews = numpy.zeros(episodes)
 	lengths = numpy.zeros(episodes)
-	#
-	# YOUR CODE HERE!
-	#
+	for ep_n in range(episodes):
+		s = environment.random_initial_state()
+		terminal = False
+		while not terminal:
+			a = expl_func(q, s, expl_param)
+			s_1 = environment.sample(a, s)
+			r = environment.R[s_1]
+			terminal = environment.is_terminal(s_1)
+
+			q[s][a] += alpha * (r + gamma * numpy.max(q[s_1][a]-q[s][a]))
+			s = s_1
+
+
+
 	policy = q.argmax(axis=1) # q.argmax(axis=1) automatically extract the policy from the q table
 	return policy, rews, lengths
 

@@ -1,3 +1,4 @@
+import random
 import warnings; warnings.filterwarnings("ignore")
 import os; os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import sys
@@ -27,7 +28,7 @@ def mse( network, dataset_input, target ):
 	return mse
 
 
-def objective( x, y):
+def objective(x, y):
 	"""
 	Implements the following simple 2-variables function to optimize:
 		2x^2 + 2xy + 2y^2 - 6x
@@ -37,7 +38,7 @@ def objective( x, y):
 	return 2*x**2 + 2*x*y + 2*y**2 - 6*x
 
 
-def findMinimum( objective_function, n_iter=5000 ):
+def findMinimum(objective_function, n_iter=5000 ):
 	"""
 	Function that find the assignements to the variables that minimize the objective function,
 	exploiting TensorFlow.
@@ -55,9 +56,14 @@ def findMinimum( objective_function, n_iter=5000 ):
 	x = tf.Variable(0.0, name='x')
 	y = tf.Variable(0.0, name='y')
 	optimizer = tf.keras.optimizers.SGD( learning_rate=0.001 )
-	#
-	# YOUR CODE HERE!
-	#
+	for _ in range(n_iter):
+		with tf.GradientTape() as tape:
+			objective = objective_function(x, y)
+			# Compute the gradient with respect to the given variables
+			grad = tape.gradient(objective, [x, y])
+
+			# Apply the gradient
+			optimizer.apply_gradients(zip(grad, [x, y]))
 	return x.numpy(), y.numpy()
 
 
@@ -78,9 +84,10 @@ def createDNN( nInputs, nOutputs, nLayer, nNodes ):
 	
 	# Initialize the neural network
 	model = Sequential()
-	#
-	# YOUR CODE HERE!
-	#
+	model.add(Dense(nNodes, input_dim=nInputs, activation="relu"))  # input layer + hidden layer #1
+	for _ in range(nLayer-1):
+		model.add(Dense(nNodes, activation="relu"))  # hidden layer #n
+	model.add(Dense(nOutputs, activation="linear"))  # output layer
 	return model
 
 
@@ -101,10 +108,17 @@ def collect_random_trajectories( env, num_episodes=10 ):
 	memory_buffer = []
 
 	for _ in range(num_episodes):
-		state = env.random_initial_state()
-		#
-		# YOUR CODE HERE!
-		#
+		s = env.random_initial_state()
+		terminal = False
+		while not terminal:
+			a = random.choice(list(env.actions.keys()))
+			s_1 = env.sample(a, s)
+			r = env.R[s_1]
+			terminal = env.is_terminal(s_1)
+			memory_buffer.append(
+				[s, a, s_1, r, terminal]
+			)
+			s = s_1
 		
 	return np.array(memory_buffer)
 
@@ -129,10 +143,15 @@ def trainDNN( model, memory_buffer, epoch=20 ):
 	# Preprocess data
 	dataset_input = np.vstack(memory_buffer[:, 2])
 	target = np.vstack(memory_buffer[:, 3])
+	optimizer = tf.keras.optimizers.Adam()
+	for e in range(epoch):
+		idx = np.random.randint(dataset_input.shape[0], size=128)
+		for i in range(dataset_input.shape[0]):
+			with tf.GradientTape() as tape:
+				objective = mse(model, dataset_input[idx], target[idx])
+				grad = tape.gradient(objective, model.trainable_variables)
+				optimizer.apply_gradients(zip(grad, model.trainable_variables))
 
-	#
-	# YOUR CODE HERE!
-	#
 	return model
 
 

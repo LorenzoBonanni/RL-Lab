@@ -1,10 +1,11 @@
 import os, sys, numpy
-module_path = os.path.abspath(os.path.join('../tools'))
-if module_path not in sys.path: sys.path.append(module_path)
-from DangerousGridWorld import GridWorld
+
+import numpy as np
+
+from tools.DangerousGridWorld import GridWorld
 
 
-def on_policy_mc( environment, maxiters=5000, eps=0.3, gamma=0.99 ):
+def on_policy_mc(environment: GridWorld, maxiters=5000, eps=0.3, gamma=0.99 ):
 	"""
 	Performs the on policy version of the every-visit MC control
 	
@@ -17,12 +18,26 @@ def on_policy_mc( environment, maxiters=5000, eps=0.3, gamma=0.99 ):
 	Returns:
 		policy: 1-d dimensional array of action identifiers where index `i` corresponds to state id `i`
 	"""
+	p_size = (environment.observation_space, environment.action_space)
+	p = np.full(p_size, eps/environment.action_space)
+	idx = np.random.randint(0, environment.action_space-1, environment.observation_space)
+	p[np.arange(environment.observation_space), idx] = (1 - eps) + eps / environment.action_space
 
-	p = [[0 for _ in range(environment.action_space)] for _ in range(environment.observation_space)]   
-	Q = [[0 for _ in range(environment.action_space)] for _ in range(environment.observation_space)]
-	#
-	# YOUR CODE HERE!
-	#
+	Q = np.array([[0 for _ in range(environment.action_space)] for _ in range(environment.observation_space)])
+	returns = np.array([[0 for _ in range(environment.action_space)] for _ in range(environment.observation_space)])
+	for _ in range(maxiters):
+		episode = environment.sample_episode(policy=p)
+		G = 0
+		for s, a, r in episode:
+			G = (gamma * G) + r
+			returns[s][a] = G
+			Q[s][a] = np.mean(returns[s][a])
+			a_star = np.argmax(Q[s])
+			for action in range(environment.action_space):
+				if action == a_star:
+					p[s][a] = (1 - eps) + eps / environment.action_space
+				else:
+					p[s][a] = eps / environment.action_space
 	deterministic_policy = [numpy.argmax(p[state]) for state in range(environment.observation_space)]	
 	return deterministic_policy
 
