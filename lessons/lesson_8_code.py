@@ -1,10 +1,11 @@
-import warnings;
+import random
+import warnings
 
 warnings.filterwarnings("ignore")
-import os;
+import os
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-import tensorflow as tf;
+import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 from tensorflow.keras.models import Sequential
@@ -13,8 +14,19 @@ import gymnasium, collections
 
 # Setting the seeds
 SEED = 15
-np.random.seed(SEED);
-tf.random.set_seed(SEED)
+
+
+def set_seed(seed: int = 42) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    tf.random.set_seed(seed)
+    tf.experimental.numpy.random.seed(seed)
+    # When running on the CuDNN backend, two further options must be set
+    os.environ['TF_CUDNN_DETERMINISTIC'] = '1'
+    os.environ['TF_DETERMINISTIC_OPS'] = '1'
+    # Set a fixed value for the hash seed
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    print(f"Random seed set as {seed}")
 
 
 def epsilon_greedy(q, state, epsilon):
@@ -98,7 +110,7 @@ def training_loop(env, neural_net, updateRule, eps=1, episodes=100, updates=1):
     for ep in range(episodes):
 
         # reset the environment and obtain the initial state
-        state = env.reset()[0]
+        state = env.reset(seed=SEED)[0]
         ep_reward = 0
         while True:
 
@@ -131,7 +143,7 @@ def training_loop(env, neural_net, updateRule, eps=1, episodes=100, updates=1):
 
     # Close the enviornment and return the rewards list
     env.close()
-    return averaged_rewards
+    return rewards_list
 
 
 def DQNUpdate(neural_net, memory_buffer, optimizer, batch_size=32, gamma=0.99):
@@ -155,7 +167,7 @@ def DQNUpdate(neural_net, memory_buffer, optimizer, batch_size=32, gamma=0.99):
             target[action] = reward
         else:
             max_q = tf.math.reduce_max(neural_net(state.reshape(-1, 4))).numpy()
-            target[action] = reward + (max_q*gamma)
+            target[action] = reward + (max_q * gamma)
 
         # compute the gradient and perform the backpropagation step
         with tf.GradientTape() as tape:
@@ -169,6 +181,8 @@ def main():
     print("*  Welcome to the eighth lesson of the RL-Lab!   *")
     print("*               (Deep Q-Network)                 *")
     print("**************************************************\n")
+
+    set_seed(SEED)
 
     _training_steps = 100
 
