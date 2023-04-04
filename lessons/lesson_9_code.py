@@ -58,7 +58,7 @@ def training_loop(env, neural_net, updateRule, frequency=10, episodes=100):
     rewards_list, reward_queue = [], collections.deque(maxlen=100)
     memory_buffer = []
     for ep in range(episodes):
-
+        trajectory = []
         # reset the environment and obtain the initial state
         state = env.reset()[0]
         ep_reward = 0
@@ -73,7 +73,7 @@ def training_loop(env, neural_net, updateRule, frequency=10, episodes=100):
 
             # Perform the action, store the data in the memory buffer and update the reward
             next_state, reward, terminated, truncated, info = env.step(action)
-            memory_buffer.append([state, action, reward, next_state, terminated])
+            trajectory.append([state, action, reward, next_state, terminated])
             ep_reward += reward
 
             # exit condition for the episode
@@ -83,8 +83,9 @@ def training_loop(env, neural_net, updateRule, frequency=10, episodes=100):
             # update the current state
             state = next_state
 
+        memory_buffer.append(trajectory)
         # Perform the actual training every 'frequency' episodes
-        if ep % frequency == 0:
+        if (ep + 1) % frequency == 0:
             updateRule(neural_net, memory_buffer, optimizer)
             memory_buffer = []
 
@@ -103,21 +104,22 @@ def REINFORCE_naive(neural_net, memory_buffer, optimizer):
     Main update rule for the REINFORCE process, the naive implementation of the policy-gradient theorem.
 
     """
-    memory_buffer = np.array(memory_buffer)
-    states = np.array(list(memory_buffer[:, 0]), dtype=np.float)
-    rewards = memory_buffer[:, 2]
+    for trj in memory_buffer:
+        trj = np.array(trj)
+        states = np.array(list(trj[:, 0]), dtype=np.float)
+        rewards = trj[:, 2]
 
-    # Initialize the array for the objectives, one for each episode considered
+        # Initialize the array for the objectives, one for each episode considered
 
-    # compute the gradient and perform the backpropagation step
-    with tf.GradientTape() as tape:
-        probs = neural_net(states)
-        log_prob_sum = tf.reduce_sum(tf.math.log(probs), axis=1)
-        objectives = log_prob_sum * sum(rewards)
-        # Implement the update rule, notice that the REINFORCE objective
-        objective = -tf.math.reduce_mean(objectives)
-        grad = tape.gradient(objective, neural_net.trainable_variables)
-        optimizer.apply_gradients(zip(grad, neural_net.trainable_variables))
+        # compute the gradient and perform the backpropagation step
+        with tf.GradientTape() as tape:
+            probs = neural_net(states)
+            log_prob_sum = tf.reduce_sum(tf.math.log(probs), axis=1)
+            objectives = log_prob_sum * sum(rewards)
+            # Implement the update rule, notice that the REINFORCE objective
+            objective = -tf.math.reduce_mean(objectives)
+            grad = tape.gradient(objective, neural_net.trainable_variables)
+            optimizer.apply_gradients(zip(grad, neural_net.trainable_variables))
 
 
 def REINFORCE_rw2go(neural_net, memory_buffer, optimizer):
@@ -125,23 +127,23 @@ def REINFORCE_rw2go(neural_net, memory_buffer, optimizer):
     Main update rule for the REINFORCE process, with the addition of the reward-to-go trick,
 
     """
-    memory_buffer = np.array(memory_buffer)
-    states = np.array(list(memory_buffer[:, 0]), dtype=np.float)
-    rewards = np.array(list(memory_buffer[:, 2]), dtype=np.float)
+    for trj in memory_buffer:
+        trj = np.array(trj)
+        np.random.shuffle(trj)
+        states = np.array(list(trj[:, 0]), dtype=np.float)
+        rewards = np.array(list(trj[:, 2]), dtype=np.float)
 
-    # Initialize the array for the objectives, one for each episode considered
-
-    # compute the gradient and perform the backpropagation step
-    with tf.GradientTape() as tape:
-        probs = neural_net(states)
-        log_prob = tf.cast(tf.math.log(probs), tf.float64)
-        rwrds = tf.reverse(tf.cumsum(tf.reverse(rewards, axis=[0])), axis=[0])
-        mul = tf.multiply(log_prob, tf.expand_dims(rwrds, axis=1))
-        objectives = tf.reduce_sum(mul, axis=1)
-        # Implement the update rule, notice that the REINFORCE objective
-        objective = -tf.math.reduce_mean(objectives)
-        grad = tape.gradient(objective, neural_net.trainable_variables)
-        optimizer.apply_gradients(zip(grad, neural_net.trainable_variables))
+        # compute the gradient and perform the backpropagation step
+        with tf.GradientTape() as tape:
+            probs = neural_net(states)
+            log_prob = tf.cast(tf.math.log(probs), tf.float64)
+            rwrds = tf.reverse(tf.cumsum(tf.reverse(rewards, axis=[0])), axis=[0])
+            mul = tf.multiply(log_prob, tf.expand_dims(rwrds, axis=1))
+            objectives = tf.reduce_sum(mul, axis=1)
+            # Implement the update rule, notice that the REINFORCE objective
+            objective = -tf.math.reduce_mean(objectives)
+            grad = tape.gradient(objective, neural_net.trainable_variables)
+            optimizer.apply_gradients(zip(grad, neural_net.trainable_variables))
 
 
 def main():
@@ -154,8 +156,8 @@ def main():
     env = gymnasium.make("CartPole-v1")
 
     # Training A)
-    # neural_net = createDNN(4, 2, nLayer=2, nNodes=32)
-    # rewards_naive = training_loop(env, neural_net, REINFORCE_naive, episodes=_training_steps)
+    neural_net = createDNN(4, 2, nLayer=2, nNodes=32)
+    rewards_naive = training_loop(env, neural_net, REINFORCE_naive, episodes=_training_steps)
 
     # Training B)
     neural_net = createDNN(4, 2, nLayer=2, nNodes=32)
@@ -163,7 +165,7 @@ def main():
 
     # Plot
     t = np.arange(0, _training_steps)
-    # plt.plot(t, rewards_naive, label="naive", linewidth=3)
+    plt.plot(t, rewards_naive, label="naive", linewidth=3)
     plt.plot(t, rewards_rw2go, label="reward to go", linewidth=3)
     plt.xlabel("epsiodes", fontsize=16)
     plt.ylabel("reward", fontsize=16)
