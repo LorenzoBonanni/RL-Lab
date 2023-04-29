@@ -1,6 +1,8 @@
 import os
 import sys
 
+import numpy as np
+
 module_path = os.path.abspath(os.path.join('../tools'))
 if module_path not in sys.path: sys.path.append(module_path)
 from DangerousGridWorld import GridWorld
@@ -63,15 +65,49 @@ def policy_iteration(environment, maxiters=300, discount=0.9, maxviter=10):
     U = [0 for _ in range(environment.observation_space)]  # utility array
 
     # 1) Policy Evaluation
-    #
-    # YOUR CODE HERE!
-    #
+    def policy_evaluation():
+        for vi in range(maxviter):
+            for s in range(len(U)):
+                values = [
+                    environment.transition_prob(s, p[s], s1) * U[s1]
+                    for s1 in range(environment.observation_space)
+                ]
+                if not environment.is_terminal(s):
+                    U[s] = environment.R[s] + discount * sum(values)
+                else:
+                    U[s] = environment.R[s]
 
-    unchanged = True
     # 2) Policy Improvement
-    #
-    # YOUR CODE HERE!
-    #
+    for _ in range(maxiters):
+        policy_evaluation()
+        unchanged = True
+
+        for cs in range(environment.observation_space):
+            value1 = max([
+                sum([
+                    environment.transition_prob(cs, a, s1) * U[s1]
+                    for s1 in range(environment.observation_space)
+                ]) for a in range(len(environment.actions))
+            ])
+
+            value2 = sum([
+                environment.transition_prob(cs, p[cs], s1) * U[s1]
+                for s1 in range(environment.observation_space)
+            ])
+
+            if value1 > value2:
+                p[cs] = np.argmax(
+                    [
+                        sum([
+                            environment.transition_prob(cs, a, s1) * U[s1]
+                            for s1 in range(environment.observation_space)
+                        ]) for a in range(len(environment.actions))
+                    ]
+                )
+                unchanged = False
+
+        if unchanged:
+            break
 
     return p
 
