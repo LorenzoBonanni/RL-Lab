@@ -1,4 +1,5 @@
 import gymnasium as gym;
+import numpy as np
 
 gym.logger.set_level(40)
 import numpy
