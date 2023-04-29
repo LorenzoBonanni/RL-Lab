@@ -20,10 +20,27 @@ def value_iteration(environment, maxiters=300, discount=0.9, max_error=1e-3):
 	
 	U_1 = [0 for _ in range(environment.observation_space)] # vector of utilities for states S
 	delta = 0 # maximum change in the utility o any state in an iteration
-	U = U_1.copy()
-	#
-	# YOUR CODE HERE!
-	#
+	for _ in range(maxiters):
+		U = U_1.copy()
+		delta = 0  # maximum change in the utility o any state in an iteration
+		for cs in range(environment.observation_space):
+			values = [
+				sum([
+					environment.transition_prob(cs, a, s1) * U[s1]
+					for s1 in range(environment.observation_space)
+				]) for a in range(len(environment.actions))
+			]
+			if not environment.is_terminal(cs):
+				U_1[cs] = environment.R[cs] + discount * max(values)
+			else:
+				U_1[cs] = environment.R[cs]
+
+			delta = max(delta, abs(U_1[cs] - U[cs]))
+
+		if delta <= max_error * (1 - discount) / discount:
+			break
+
+
 	return environment.values_to_policy( U )
 
 	

@@ -1,16 +1,17 @@
+import os
 import random
 import warnings
 
-warnings.filterwarnings("ignore")
-import os
-
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-import tensorflow as tf
-import numpy as np
+import collections
+import gymnasium
 import matplotlib.pyplot as plt
-from tensorflow.keras.models import Sequential
+import numpy as np
+import tensorflow as tf
 from tensorflow.keras.layers import Dense
-import gymnasium, collections
+from tensorflow.keras.models import Sequential
+
+warnings.filterwarnings("ignore")
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 SEED = 15
 
@@ -59,17 +60,14 @@ def training_loop(env, neural_net, updateRule, frequency=10, episodes=100):
     memory_buffer = []
     for ep in range(episodes):
         trajectory = []
+        ep_reward = 0
         # reset the environment and obtain the initial state
         state = env.reset()[0]
-        ep_reward = 0
         while True:
 
             # select the action to perform
-            p = neural_net(state.reshape(-1, 4)).numpy()
-            action = random.choices(
-                population=range(len(p)),
-                weights=p
-            )[0]
+            p = neural_net(state.reshape(-1, 4)).numpy()[0]
+            action = np.random.choice(2, p=p)
 
             # Perform the action, store the data in the memory buffer and update the reward
             next_state, reward, terminated, truncated, info = env.step(action)
@@ -107,13 +105,15 @@ def REINFORCE_naive(neural_net, memory_buffer, optimizer):
     for trj in memory_buffer:
         trj = np.array(trj)
         states = np.array(list(trj[:, 0]), dtype=np.float)
-        rewards = trj[:, 2]
-
+        rewards = np.array(list(trj[:, 2]), dtype=np.float)
+        # actions = np.expand_dims(, axis=0).T
+        actions = np.array(list(trj[:, 1]), dtype=int)
         # Initialize the array for the objectives, one for each episode considered
 
         # compute the gradient and perform the backpropagation step
         with tf.GradientTape() as tape:
             probs = neural_net(states)
+            probs = probs[:, actions]
             log_prob_sum = tf.reduce_sum(tf.math.log(probs), axis=1)
             objectives = log_prob_sum * sum(rewards)
             # Implement the update rule, notice that the REINFORCE objective
@@ -129,7 +129,7 @@ def REINFORCE_rw2go(neural_net, memory_buffer, optimizer):
     """
     for trj in memory_buffer:
         trj = np.array(trj)
-        np.random.shuffle(trj)
+        # np.random.shuffle(trj)
         states = np.array(list(trj[:, 0]), dtype=np.float)
         rewards = np.array(list(trj[:, 2]), dtype=np.float)
 
