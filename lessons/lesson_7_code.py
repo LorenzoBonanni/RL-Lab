@@ -1,15 +1,17 @@
 import random
-import warnings;
+import warnings
+
+from tqdm import tqdm
 
 warnings.filterwarnings("ignore")
-import os;
+import os
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import sys
 
 module_path = os.path.abspath(os.path.join('../tools'))
 if module_path not in sys.path: sys.path.append(module_path)
-import tensorflow as tf;
+import tensorflow as tf
 import numpy as np
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
@@ -149,13 +151,13 @@ def trainDNN(model, memory_buffer, epoch=20):
     dataset_input = np.vstack(memory_buffer[:, 2])
     target = np.vstack(memory_buffer[:, 3])
     optimizer = tf.keras.optimizers.Adam()
-    for e in range(epoch):
+    for e in tqdm(range(epoch)):
         idx = np.random.randint(dataset_input.shape[0], size=128)
-        for i in range(dataset_input.shape[0]):
-            with tf.GradientTape() as tape:
-                objective = mse(model, dataset_input[idx], target[idx])
-                grad = tape.gradient(objective, model.trainable_variables)
-                optimizer.apply_gradients(zip(grad, model.trainable_variables))
+
+        with tf.GradientTape() as tape:
+            objective = mse(model, dataset_input[idx], target[idx])
+            grad = tape.gradient(objective, model.trainable_variables)
+            optimizer.apply_gradients(zip(grad, model.trainable_variables))
 
     return model
 
@@ -190,7 +192,7 @@ def main():
     print(f"\tstate {inp[0][0]} => reward: {out[0][0]} ")
     print(f"\tstate {inp[1][0]} => reward: {out[1][0]} ")
 
-    dnn_model = trainDNN(dnn_model, memory_buffer, epoch=1000)
+    dnn_model = trainDNN(dnn_model, memory_buffer, epoch=20)
 
     out = dnn_model(inp).numpy()
     print("Post Training Reward Prediction: ")
