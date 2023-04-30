@@ -106,15 +106,18 @@ def REINFORCE_naive(neural_net, memory_buffer, optimizer):
         trj = np.array(trj)
         states = np.array(list(trj[:, 0]), dtype=np.float)
         rewards = np.array(list(trj[:, 2]), dtype=np.float)
-        # actions = np.expand_dims(, axis=0).T
         actions = np.array(list(trj[:, 1]), dtype=int)
         # Initialize the array for the objectives, one for each episode considered
 
         # compute the gradient and perform the backpropagation step
         with tf.GradientTape() as tape:
             probs = neural_net(states)
-            probs = probs[:, actions]
-            log_prob_sum = tf.reduce_sum(tf.math.log(probs), axis=1)
+            indices = tf.transpose(tf.stack([tf.range(probs.shape[0]), actions]))
+            probs = tf.gather_nd(
+                indices=indices,
+                params=probs
+            )
+            log_prob_sum = tf.reduce_sum(tf.math.log(probs))
             objectives = log_prob_sum * sum(rewards)
             # Implement the update rule, notice that the REINFORCE objective
             objective = -tf.math.reduce_mean(objectives)
@@ -131,11 +134,17 @@ def REINFORCE_rw2go(neural_net, memory_buffer, optimizer):
         trj = np.array(trj)
         # np.random.shuffle(trj)
         states = np.array(list(trj[:, 0]), dtype=np.float)
+        actions = np.array(list(trj[:, 1]), dtype=int)
         rewards = np.array(list(trj[:, 2]), dtype=np.float)
 
         # compute the gradient and perform the backpropagation step
         with tf.GradientTape() as tape:
             probs = neural_net(states)
+            indices = tf.transpose(tf.stack([tf.range(probs.shape[0]), actions]))
+            probs = tf.gather_nd(
+                indices=indices,
+                params=probs
+            )
             log_prob = tf.cast(tf.math.log(probs), tf.float64)
             rwrds = tf.reverse(tf.cumsum(tf.reverse(rewards, axis=[0])), axis=[0])
             mul = tf.multiply(log_prob, tf.expand_dims(rwrds, axis=1))

@@ -44,8 +44,8 @@ def epsilon_greedy(q, state, epsilon):
     q = q.numpy()
     if np.random.random() < epsilon:
         return np.random.choice(q.shape[1])
-    return q[state].argmax()
-
+    # return q[state].argmax()
+    return q.argmax()
 
 def createDNN(nInputs, nOutputs, nLayer, nNodes):
     """
@@ -79,7 +79,7 @@ def mse(network, dataset_input, target):
 
     # Compute the predicted value, over time this value should
     # looks more like to the expected output (i.e., target)
-    predicted_value = network(dataset_input.reshape(-1, 4))
+    predicted_value = network(dataset_input)
 
     # Compute MSE between the predicted value and the expected labels
     mse = tf.math.square(predicted_value - target)
@@ -108,7 +108,7 @@ def training_loop(env, neural_net, updateRule, eps=1, episodes=100, updates=1):
     rewards_list, memory_buffer = [], collections.deque(maxlen=1000)
     averaged_rewards = []
     for ep in range(episodes):
-
+        eps *= 0.999
         # reset the environment and obtain the initial state
         state = env.reset(seed=SEED)[0]
         ep_reward = 0
@@ -157,23 +157,32 @@ def DQNUpdate(neural_net, memory_buffer, optimizer, batch_size=32, gamma=0.99):
         return
 
     indices = np.random.randint(len(memory_buffer), size=batch_size)
-    for idx in indices:
-        # extract data from the buffer
-        state, action, reward, next_state, done = memory_buffer[idx]
+    memory_buffer = np.array(list(memory_buffer))
+    # extract data from the buffer
+    batch = memory_buffer[indices, :]
+    state = np.array(list(batch[:, 0]), dtype=np.float)
+    action = np.array(list(batch[:, 1]), dtype=np.int)
+    reward = np.array(list(batch[:, 2]), dtype=np.float)
+    next_state = np.array(list(batch[:, 3]), dtype=np.float)
+    done = np.array(list(batch[:, 4]), dtype=bool)
 
-        # compute the target for the training
-        target = neural_net(state.reshape(-1, 4)).numpy()[0]
-        if done:
-            target[action] = reward
-        else:
-            max_q = tf.math.reduce_max(neural_net(state.reshape(-1, 4))).numpy()
-            target[action] = reward + (max_q * gamma)
+    # compute the target for the training
+    target = neural_net(state).numpy()
+    not_done = np.logical_not(done)
+    idx_done = np.where(done)
+    idx_not_done = np.where(not_done)
+    action_done = action[idx_done]
+    action_not_done = action[not_done]
+    target[idx_done, action_done] = reward[idx_done]
 
-        # compute the gradient and perform the backpropagation step
-        with tf.GradientTape() as tape:
-            objective = mse(neural_net, state, target)
-            grad = tape.gradient(objective, neural_net.trainable_variables)
-            optimizer.apply_gradients(zip(grad, neural_net.trainable_variables))
+    max_q = tf.math.reduce_max(neural_net(next_state)).numpy()
+    target[idx_not_done, action_not_done] = reward[idx_not_done] + (max_q * gamma)
+
+    # compute the gradient and perform the backpropagation step
+    with tf.GradientTape() as tape:
+        objective = mse(neural_net, state, target)
+        grad = tape.gradient(objective, neural_net.trainable_variables)
+        optimizer.apply_gradients(zip(grad, neural_net.trainable_variables))
 
 
 def main():
