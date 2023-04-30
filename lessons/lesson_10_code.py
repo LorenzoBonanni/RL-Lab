@@ -62,7 +62,11 @@ def training_loop(env, actor_net, critic_net, updateRule, frequency=10, episodes
         # Update the reward list to return
         rewards_list.append(ep_reward)
         averaged_rewards.append(np.mean(rewards_list))
-        print(f"episode {ep:2d}: rw: {averaged_rewards[-1]:3.2f}")
+        print(f"episode {ep:4d}: rw: {int(ep_reward):3d} (averaged: {np.mean(rewards_list):5.2f})")
+
+    # Close the enviornment and return the rewards list
+    env.close()
+    return averaged_rewards
 
 
 def A2C(actor_net, critic_net, memory_buffer, actor_optimizer, critic_optimizer, gamma=0.99):
