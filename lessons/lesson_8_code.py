@@ -47,6 +47,7 @@ def epsilon_greedy(q, state, epsilon):
     # return q[state].argmax()
     return q.argmax()
 
+
 def createDNN(nInputs, nOutputs, nLayer, nNodes):
     """
     Function that generates a neural network with the given requirements.
@@ -89,7 +90,7 @@ def mse(network, dataset_input, target):
     return mse
 
 
-def training_loop(env, neural_net, updateRule, eps=1, episodes=100, updates=1):
+def training_loop(env, neural_net, updateRule, eps=1, episodes=100, updates=10):
     """
     Main loop of the reinforcement learning algorithm. Execute the actions and interact
     with the environment to collect the experience for the training.
@@ -104,7 +105,7 @@ def training_loop(env, neural_net, updateRule, eps=1, episodes=100, updates=1):
 
     """
     # initialize the optimizer
-    optimizer = tf.keras.optimizers.Adam()
+    optimizer = tf.keras.optimizers.Adam(lr=0.001)
     rewards_list, memory_buffer = [], collections.deque(maxlen=1000)
     averaged_rewards = []
     for ep in range(episodes):
@@ -127,7 +128,8 @@ def training_loop(env, neural_net, updateRule, eps=1, episodes=100, updates=1):
             ep_reward += reward
 
             # Perform the actual training
-            updateRule(neural_net, memory_buffer, optimizer)
+            for _ in range(1):
+                updateRule(neural_net, memory_buffer, optimizer)
 
             # exit condition for the episode
             if terminated or truncated:
@@ -136,6 +138,7 @@ def training_loop(env, neural_net, updateRule, eps=1, episodes=100, updates=1):
             # update the current state
             state = next_state
 
+        eps = eps * 0.99
         # Update the reward list to return
         rewards_list.append(ep_reward)
         averaged_rewards.append(np.mean(rewards_list))
@@ -169,10 +172,10 @@ def DQNUpdate(neural_net, memory_buffer, optimizer, batch_size=32, gamma=0.99):
     # compute the target for the training
     target = neural_net(state).numpy()
     not_done = np.logical_not(done)
-    idx_done = np.where(done)
-    idx_not_done = np.where(not_done)
+    idx_done = np.where(done)[0]
+    idx_not_done = np.where(not_done)[0]
     action_done = action[idx_done]
-    action_not_done = action[not_done]
+    action_not_done = action[idx_not_done]
     target[idx_done, action_done] = reward[idx_done]
 
     max_q = tf.math.reduce_max(neural_net(next_state)).numpy()
@@ -195,7 +198,7 @@ def main():
 
     _training_steps = 100
 
-    env = gymnasium.make("CartPole-v1")  # , render_mode="human" )
+    env = gymnasium.make("CartPole-v1", render_mode="human" )
     neural_net = createDNN(4, 2, nLayer=2, nNodes=32)
     rewards = training_loop(env, neural_net, DQNUpdate, episodes=_training_steps)
 

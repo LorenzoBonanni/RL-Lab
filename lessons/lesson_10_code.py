@@ -11,8 +11,6 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
 import gymnasium, collections
 
-SEED = 15
-
 
 # Notice that the value function has only one output with a linear activation
 # function in the last layer
@@ -34,7 +32,7 @@ def training_loop(env, actor_net, critic_net, updateRule, frequency=10, episodes
 
     for ep in range(episodes):
         # reset the environment and obtain the initial state
-        state = env.reset(seed=SEED)[0]
+        state = env.reset()[0]
         ep_reward = 0
         curr_traj = []
         while True:
