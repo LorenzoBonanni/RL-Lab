@@ -15,20 +15,6 @@ import gymnasium, collections
 # Setting the seeds
 SEED = 15
 
-
-def set_seed(seed: int = 42) -> None:
-    random.seed(seed)
-    np.random.seed(seed)
-    tf.random.set_seed(seed)
-    tf.experimental.numpy.random.seed(seed)
-    # When running on the CuDNN backend, two further options must be set
-    os.environ['TF_CUDNN_DETERMINISTIC'] = '1'
-    os.environ['TF_DETERMINISTIC_OPS'] = '1'
-    # Set a fixed value for the hash seed
-    os.environ["PYTHONHASHSEED"] = str(seed)
-    print(f"Random seed set as {seed}")
-
-
 def epsilon_greedy(q, state, epsilon):
     """
     Epsilon-greedy action selection function
@@ -128,7 +114,7 @@ def training_loop(env, neural_net, updateRule, eps=1, episodes=100, updates=10):
             ep_reward += reward
 
             # Perform the actual training
-            for _ in range(1):
+            for _ in range(updates):
                 updateRule(neural_net, memory_buffer, optimizer)
 
             # exit condition for the episode
@@ -149,7 +135,7 @@ def training_loop(env, neural_net, updateRule, eps=1, episodes=100, updates=10):
     return rewards_list
 
 
-def DQNUpdate(neural_net, memory_buffer, optimizer, batch_size=32, gamma=0.99):
+def DQNUpdate(neural_net, memory_buffer, optimizer, batch_size=256, gamma=0.99):
     """
     Main update rule for the DQN process. Extract data from the memory buffer and update
     the network computing the gradient.
@@ -163,27 +149,19 @@ def DQNUpdate(neural_net, memory_buffer, optimizer, batch_size=32, gamma=0.99):
     memory_buffer = np.array(list(memory_buffer))
     # extract data from the buffer
     batch = memory_buffer[indices, :]
-    state = np.array(list(batch[:, 0]), dtype=np.float)
-    action = np.array(list(batch[:, 1]), dtype=np.int)
-    reward = np.array(list(batch[:, 2]), dtype=np.float)
-    next_state = np.array(list(batch[:, 3]), dtype=np.float)
-    done = np.array(list(batch[:, 4]), dtype=bool)
+    states = np.vstack(batch[:, 0])
+    actions = np.vstack(batch[:, 1])
+    rewards = np.vstack(batch[:, 2])
+    next_states = np.vstack(batch[:, 3])
+    done = np.vstack(batch[:, 4])
 
     # compute the target for the training
-    target = neural_net(state).numpy()
-    not_done = np.logical_not(done)
-    idx_done = np.where(done)[0]
-    idx_not_done = np.where(not_done)[0]
-    action_done = action[idx_done]
-    action_not_done = action[idx_not_done]
-    target[idx_done, action_done] = reward[idx_done]
-
-    max_q = tf.math.reduce_max(neural_net(next_state)).numpy()
-    target[idx_not_done, action_not_done] = reward[idx_not_done] + (max_q * gamma)
-
+    target = neural_net(states).numpy()
+    max_q = tf.math.reduce_max(neural_net(next_states), axis=1)
+    target[range(batch_size), actions] = rewards + (1 - done.astype(int)) * max_q * gamma
     # compute the gradient and perform the backpropagation step
     with tf.GradientTape() as tape:
-        objective = mse(neural_net, state, target)
+        objective = mse(neural_net, states, target)
         grad = tape.gradient(objective, neural_net.trainable_variables)
         optimizer.apply_gradients(zip(grad, neural_net.trainable_variables))
 
@@ -194,11 +172,9 @@ def main():
     print("*               (Deep Q-Network)                 *")
     print("**************************************************\n")
 
-    set_seed(SEED)
-
     _training_steps = 100
 
-    env = gymnasium.make("CartPole-v1", render_mode="human" )
+    env = gymnasium.make("CartPole-v1")
     neural_net = createDNN(4, 2, nLayer=2, nNodes=32)
     rewards = training_loop(env, neural_net, DQNUpdate, episodes=_training_steps)
 

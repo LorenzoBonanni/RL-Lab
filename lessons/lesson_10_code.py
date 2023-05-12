@@ -27,7 +27,8 @@ def createDNN(nInputs, nOutputs, nLayer, nNodes, last_activation):
 def training_loop(env, actor_net, critic_net, updateRule, frequency=10, episodes=100):
     actor_optimizer = tf.keras.optimizers.Adam()
     critic_optimizer = tf.keras.optimizers.Adam()
-    rewards_list, memory_buffer = [], collections.deque(maxlen=1000)
+    rewards_list, actor_buffer = [], collections.deque(maxlen=1000)
+    critic_buffer = collections.deque(maxlen=1000)
     averaged_rewards = []
 
     for ep in range(episodes):
@@ -43,6 +44,8 @@ def training_loop(env, actor_net, critic_net, updateRule, frequency=10, episodes
             # Perform the action, store the data in the memory buffer and update the reward
             next_state, reward, terminated, truncated, info = env.step(action)
             curr_traj.append([state, action, reward, next_state, terminated])
+            critic_buffer.append([state, action, reward, next_state, terminated])
+
             ep_reward += reward
 
             # exit condition for the episode
@@ -51,11 +54,12 @@ def training_loop(env, actor_net, critic_net, updateRule, frequency=10, episodes
 
             # update the current state
             state = next_state
-        memory_buffer.append(curr_traj)
+        actor_buffer.append(curr_traj)
         # Perform the actual training
         if (ep + 1) % frequency == 0:
-            updateRule(actor_net, critic_net, memory_buffer, actor_optimizer, critic_optimizer)
-            memory_buffer = []
+            updateRule(actor_net, critic_net, actor_buffer, critic_buffer, actor_optimizer, critic_optimizer)
+            actor_buffer = []
+            critic_buffer = []
 
         # Update the reward list to return
         rewards_list.append(ep_reward)
@@ -67,42 +71,23 @@ def training_loop(env, actor_net, critic_net, updateRule, frequency=10, episodes
     return averaged_rewards
 
 
-def A2C(actor_net, critic_net, memory_buffer, actor_optimizer, critic_optimizer, gamma=0.99):
+def A2C(actor_net, critic_net, actor_buffer, critic_buffer, actor_optimizer, critic_optimizer, gamma=0.99):
     """
     Main update rule for the A2C update. This function includes the updates for the actor network (or policy function)
     and for the critic network (or value function)
 
     """
-    # update rule for the critic (value function)
-    for _ in range(10):
-        # Shuffle the memory buffer
-        np.random.shuffle(memory_buffer)
-        objectives = []
-        # Tape for the critic
-        with tf.GradientTape() as critic_tape:
-            for trj in memory_buffer:
-                trj = np.array(trj)
-                states = np.array(list(trj[:, 0]), dtype=np.float)
-                rewards = np.array(list(trj[:, 2]), dtype=np.float)
-                actions = np.array(list(trj[:, 1]), dtype=int)
-                next_states = np.array(list(trj[:, 3]), dtype=np.float)
-                done = np.array(list(trj[:, 4]), dtype=bool)
-                # Compute the target and the MSE between the current prediction
-                target = rewards + (1 - done.astype(int)) * gamma * critic_net(next_states)
-                prediction = critic_net(states)
-                mse = tf.math.square(prediction - target)
-                objectives.append(tf.math.reduce_mean(mse))
-            # Perform the actual gradient-descent process
-            objective = tf.math.reduce_mean(objectives)
-            grads = critic_tape.gradient(objective, critic_net.trainable_variables)
-            critic_optimizer.apply_gradients(zip(grads, critic_net.trainable_variables))
+    BATCH_SIZE = 128
+
+    if len(critic_buffer) < BATCH_SIZE:
+        return
 
     # implement the update rule for the actor (policy function)
     # extract the information from the buffer for the policy update
     # Tape for the actor
     objectives = []
     with tf.GradientTape() as actor_tape:
-        for trj in memory_buffer:
+        for trj in actor_buffer:
             trj = np.array(trj)
             states = np.array(list(trj[:, 0]), dtype=np.float)
             rewards = np.array(list(trj[:, 2]), dtype=np.float)
@@ -117,12 +102,33 @@ def A2C(actor_net, critic_net, memory_buffer, actor_optimizer, critic_optimizer,
                 indices=indices,
                 params=probs
             )
-            objective = tf.math.log(probs) * adv_a - adv_b
+            objective = tf.math.log(probs) * (adv_a - adv_b)
             objectives.append(tf.reduce_mean(tf.reduce_sum(objective)))
 
         objective = - tf.math.reduce_mean(objectives)
         grads = actor_tape.gradient(objective, actor_net.trainable_variables)
-        critic_optimizer.apply_gradients(zip(grads, actor_net.trainable_variables))
+        actor_optimizer.apply_gradients(zip(grads, actor_net.trainable_variables))
+
+    # update rule for the critic (value function)
+    for _ in range(10):
+        # Sample batch
+        critic_buffer = np.array(critic_buffer)
+        indices = np.random.randint(len(critic_buffer), size=BATCH_SIZE)
+        # extract data from the buffer
+        batch = critic_buffer[indices, :]
+        states = np.array(list(batch[:, 0]), dtype=np.float)
+        rewards = np.array(list(batch[:, 2]), dtype=np.float)
+        # actions = np.array(list(batch[:, 1]), dtype=int)
+        next_states = np.array(list(batch[:, 3]), dtype=np.float)
+        done = np.array(list(batch[:, 4]), dtype=bool)
+        # Tape for the critic
+        with tf.GradientTape() as critic_tape:
+            # Compute the target and the MSE between the current prediction
+            target = rewards + (1 - done.astype(int)) * gamma * critic_net(next_states)
+            prediction = critic_net(states)
+            objective = tf.math.square(prediction - target)
+            grads = critic_tape.gradient(objective, critic_net.trainable_variables)
+            critic_optimizer.apply_gradients(zip(grads, critic_net.trainable_variables))
 
 
 def main():
