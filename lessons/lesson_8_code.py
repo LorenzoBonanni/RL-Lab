@@ -15,6 +15,7 @@ import gymnasium, collections
 # Setting the seeds
 SEED = 15
 
+
 def epsilon_greedy(q, state, epsilon):
     """
     Epsilon-greedy action selection function
@@ -97,7 +98,7 @@ def training_loop(env, neural_net, updateRule, eps=1, episodes=100, updates=10):
     for ep in range(episodes):
         eps *= 0.999
         # reset the environment and obtain the initial state
-        state = env.reset(seed=SEED)[0]
+        state = env.reset()[0]
         ep_reward = 0
         while True:
 

@@ -27,7 +27,8 @@ def createDNN(nInputs, nOutputs, nLayer, nNodes, last_activation):
 def training_loop(env, actor_net, critic_net, updateRule, frequency=10, episodes=100):
     actor_optimizer = tf.keras.optimizers.Adam()
     critic_optimizer = tf.keras.optimizers.Adam()
-    rewards_list, actor_buffer = [], collections.deque(maxlen=1000)
+    rewards_list, reward_queue = [], collections.deque(maxlen=100)
+    actor_buffer = collections.deque(maxlen=1000)
     critic_buffer = collections.deque(maxlen=1000)
     averaged_rewards = []
 
@@ -62,13 +63,13 @@ def training_loop(env, actor_net, critic_net, updateRule, frequency=10, episodes
             critic_buffer = []
 
         # Update the reward list to return
-        rewards_list.append(ep_reward)
-        averaged_rewards.append(np.mean(rewards_list))
-        print(f"episode {ep:4d}: rw: {int(ep_reward):3d} (averaged: {np.mean(rewards_list):5.2f})")
+        reward_queue.append(ep_reward)
+        rewards_list.append(np.mean(reward_queue))
+        print(f"episode {ep:4d}: rw: {int(ep_reward):3d} (averaged: {np.mean(reward_queue):5.2f})")
 
     # Close the enviornment and return the rewards list
     env.close()
-    return averaged_rewards
+    return rewards_list
 
 
 def A2C(actor_net, critic_net, actor_buffer, critic_buffer, actor_optimizer, critic_optimizer, gamma=0.99):
@@ -77,10 +78,10 @@ def A2C(actor_net, critic_net, actor_buffer, critic_buffer, actor_optimizer, cri
     and for the critic network (or value function)
 
     """
-    BATCH_SIZE = 128
-
-    if len(critic_buffer) < BATCH_SIZE:
-        return
+    # BATCH_SIZE = 128
+    #
+    # if len(critic_buffer) < BATCH_SIZE:
+    #     return
 
     # implement the update rule for the actor (policy function)
     # extract the information from the buffer for the policy update
@@ -113,14 +114,12 @@ def A2C(actor_net, critic_net, actor_buffer, critic_buffer, actor_optimizer, cri
     for _ in range(10):
         # Sample batch
         critic_buffer = np.array(critic_buffer)
-        indices = np.random.randint(len(critic_buffer), size=BATCH_SIZE)
-        # extract data from the buffer
-        batch = critic_buffer[indices, :]
-        states = np.array(list(batch[:, 0]), dtype=np.float)
-        rewards = np.array(list(batch[:, 2]), dtype=np.float)
+        # indices = np.random.randint(len(critic_buffer), size=BATCH_SIZE)
+        states = np.array(list(critic_buffer[:, 0]), dtype=np.float)
+        rewards = np.array(list(critic_buffer[:, 2]), dtype=np.float)
         # actions = np.array(list(batch[:, 1]), dtype=int)
-        next_states = np.array(list(batch[:, 3]), dtype=np.float)
-        done = np.array(list(batch[:, 4]), dtype=bool)
+        next_states = np.array(list(critic_buffer[:, 3]), dtype=np.float)
+        done = np.array(list(critic_buffer[:, 4]), dtype=bool)
         # Tape for the critic
         with tf.GradientTape() as critic_tape:
             # Compute the target and the MSE between the current prediction
