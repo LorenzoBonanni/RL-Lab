@@ -115,8 +115,7 @@ def training_loop(env, neural_net, updateRule, eps=1, episodes=100, updates=10):
             ep_reward += reward
 
             # Perform the actual training
-            for _ in range(updates):
-                updateRule(neural_net, memory_buffer, optimizer)
+            updateRule(neural_net, memory_buffer, optimizer)
 
             # exit condition for the episode
             if terminated or truncated:
@@ -146,24 +145,26 @@ def DQNUpdate(neural_net, memory_buffer, optimizer, batch_size=256, gamma=0.99):
     if len(memory_buffer) < batch_size:
         return
 
-    indices = np.random.randint(len(memory_buffer), size=batch_size)
     memory_buffer = np.array(list(memory_buffer))
     # extract data from the buffer
-    batch = memory_buffer[indices, :]
-    states = np.vstack(batch[:, 0])
-    actions = np.vstack(batch[:, 1])
-    rewards = np.vstack(batch[:, 2])
-    next_states = np.vstack(batch[:, 3])
-    done = np.vstack(batch[:, 4])
-
-    # compute the target for the training
-    target = neural_net(states).numpy()
-    max_q = tf.math.reduce_max(neural_net(next_states), axis=1)
-    target[range(batch_size), actions] = rewards + (1 - done.astype(int)) * max_q * gamma
-    # compute the gradient and perform the backpropagation step
+    batches = [memory_buffer[np.random.randint(len(memory_buffer), size=batch_size), :] for _ in range(10)]
     with tf.GradientTape() as tape:
-        objective = mse(neural_net, states, target)
-        grad = tape.gradient(objective, neural_net.trainable_variables)
+        objectives = []
+        for batch in batches:
+            states = np.vstack(batch[:, 0])
+            actions = np.vstack(batch[:, 1])
+            rewards = np.vstack(batch[:, 2])
+            next_states = np.vstack(batch[:, 3])
+            done = np.vstack(batch[:, 4])
+
+            # compute the target for the training
+            target = neural_net(states).numpy()
+            max_q = tf.math.reduce_max(neural_net(next_states), axis=1)
+            target[range(batch_size), actions] = rewards + (1 - done.astype(int)) * max_q * gamma
+            # compute the gradient and perform the backpropagation step
+            batch_objective = mse(neural_net, states, target)
+            objectives.append(batch_objective)
+        grad = tape.gradient(tf.reduce_mean(objectives), neural_net.trainable_variables)
         optimizer.apply_gradients(zip(grad, neural_net.trainable_variables))
 
 
