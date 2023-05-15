@@ -75,7 +75,6 @@ def A2C(actor_net, critic_net, memory_buffer, actor_optimizer, critic_optimizer,
     # implement the update rule for the actor (policy function)
     # extract the information from the buffer for the policy update
     # Tape for the actor
-    objectives = []
     with tf.GradientTape() as actor_tape:
         memory_buffer = np.array(memory_buffer)
         states = np.array(list(memory_buffer[:, 0]), dtype=np.float)
@@ -92,9 +91,9 @@ def A2C(actor_net, critic_net, memory_buffer, actor_optimizer, critic_optimizer,
             params=probs
         )
         objective = tf.math.log(probs) * (adv_a - adv_b)
-        objectives.append(tf.reduce_mean(tf.reduce_sum(objective)))
+        # objectives.append(tf.reduce_mean(tf.reduce_sum(objective)))
 
-        objective = - tf.math.reduce_mean(objectives)
+        objective = - tf.math.reduce_sum(objective)
         grads = actor_tape.gradient(objective, actor_net.trainable_variables)
         actor_optimizer.apply_gradients(zip(grads, actor_net.trainable_variables))
 
@@ -102,10 +101,11 @@ def A2C(actor_net, critic_net, memory_buffer, actor_optimizer, critic_optimizer,
     for _ in range(10):
         # Sample batch
         np.random.shuffle(memory_buffer)
-        states = np.array(list(memory_buffer[:, 0]), dtype=np.float)
-        rewards = np.array(list(memory_buffer[:, 2]), dtype=np.float)
-        next_states = np.array(list(memory_buffer[:, 3]), dtype=np.float)
-        done = np.array(list(memory_buffer[:, 4]), dtype=bool)
+        states = np.vstack(memory_buffer[:, 0])
+        # actions = np.array(memory_buffer[:, 1], dtype=int)
+        next_states = np.vstack(memory_buffer[:, 3])
+        rewards = memory_buffer[:, 2]
+        done = memory_buffer[:, 4]
         # Tape for the critic
         with tf.GradientTape() as critic_tape:
             # Compute the target and the MSE between the current prediction

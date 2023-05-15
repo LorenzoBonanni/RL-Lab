@@ -79,7 +79,6 @@ def A2C(actor_net, critic_net, memory_buffer, actor_optimizer, critic_optimizer,
     # implement the update rule for the actor (policy function)
     # extract the information from the buffer for the policy update
     # Tape for the actor
-    objectives = []
     with tf.GradientTape() as actor_tape:
         memory_buffer = np.array(memory_buffer)
         states = np.array(list(memory_buffer[:, 0]), dtype=np.float)
@@ -104,10 +103,11 @@ def A2C(actor_net, critic_net, memory_buffer, actor_optimizer, critic_optimizer,
     for _ in range(10):
         # Sample batch
         np.random.shuffle(memory_buffer)
-        states = np.array(list(memory_buffer[:, 0]), dtype=np.float)
-        rewards = np.array(list(memory_buffer[:, 2]), dtype=np.float)
-        next_states = np.array(list(memory_buffer[:, 3]), dtype=np.float)
-        done = np.array(list(memory_buffer[:, 4]), dtype=bool)
+        states = np.vstack(memory_buffer[:, 0])
+        # actions = np.array(memory_buffer[:, 1], dtype=int)
+        next_states = np.vstack(memory_buffer[:, 3])
+        rewards = memory_buffer[:, 2]
+        done = memory_buffer[:, 4]
         # Tape for the critic
         with tf.GradientTape() as critic_tape:
             # Compute the target and the MSE between the current prediction
@@ -116,7 +116,6 @@ def A2C(actor_net, critic_net, memory_buffer, actor_optimizer, critic_optimizer,
             objective = tf.math.square(prediction - target)
             grads = critic_tape.gradient(objective, critic_net.trainable_variables)
             critic_optimizer.apply_gradients(zip(grads, critic_net.trainable_variables))
-
 
 class OverrideReward(gymnasium.wrappers.NormalizeReward):
     """

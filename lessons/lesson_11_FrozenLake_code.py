@@ -1,5 +1,6 @@
 import collections
 import warnings;
+from copy import deepcopy
 
 import tensorflow as tf
 from tensorflow.keras.layers import Dense
@@ -83,7 +84,6 @@ def training_loop(env, actor_net, critic_net, updateRule, frequency=10, episodes
     # length_list = []
     succ_rates = []
     succ_rate = 0
-    count = 0
     for ep in range(episodes):
         # reset the environment and obtain the initial state
         state = env.reset()[0]
@@ -103,7 +103,7 @@ def training_loop(env, actor_net, critic_net, updateRule, frequency=10, episodes
             # exit condition for the episode
             if terminated or truncated:
                 # length_list.append(ep_length)
-                succ_rate += int(next_state == MAP_SIZE-1 * MAP_SIZE + MAP_SIZE-1)
+                succ_rate += int(next_state == MAP_SIZE - 1 * MAP_SIZE + MAP_SIZE - 1)
                 # print(reward)
                 break
 
@@ -113,7 +113,7 @@ def training_loop(env, actor_net, critic_net, updateRule, frequency=10, episodes
         if (ep + 1) % frequency == 0:
             updateRule(actor_net, critic_net, memory_buffer, actor_optimizer, critic_optimizer)
             memory_buffer = []
-            succ_rates.append(succ_rate)
+            succ_rates.append(deepcopy(succ_rate))
 
         # Update the reward list to return
         reward_queue.append(ep_reward)
@@ -121,7 +121,6 @@ def training_loop(env, actor_net, critic_net, updateRule, frequency=10, episodes
         print(f"episode {ep:4d}: rw: {int(ep_reward):3d} succ:{succ_rate} (averaged: {np.mean(reward_queue):5.2f})")
         if (ep + 1) % frequency == 0:
             succ_rate = 0
-
 
     # Close the environment and return the rewards list
     env.close()
@@ -137,29 +136,24 @@ def A2C(actor_net, critic_net, memory_buffer, actor_optimizer, critic_optimizer,
     # implement the update rule for the actor (policy function)
     # extract the information from the buffer for the policy update
     # Tape for the actor
-    objectives = []
     with tf.GradientTape() as actor_tape:
         memory_buffer = np.array(memory_buffer)
-        states = np.vstack(memory_buffer[:, 0])
-        rewards = memory_buffer[:, 2]
-        actions = memory_buffer[:, 1].astype(int)
-        next_states = np.vstack(memory_buffer[:, 3])
+        states = np.array(list(memory_buffer[:, 0]), dtype=np.float)
+        rewards = np.array(list(memory_buffer[:, 2]), dtype=np.float)
+        actions = np.array(list(memory_buffer[:, 1]), dtype=int)
+        next_states = np.array(list(memory_buffer[:, 3]), dtype=np.float)
         # compute the log-prob of the current trajectory and the objective function
-        adv_a = rewards + gamma * critic_net(next_states).numpy().reshape(-1)
-        adv_b = critic_net(states).numpy().reshape(-1)
-        probs = actor_net(states)
-        indices = tf.transpose(
-            tf.stack([tf.range(probs.shape[0]), actions])
-        )
+        adv_a = rewards + gamma * critic_net(tf.expand_dims(next_states, -1)).numpy().reshape(-1)
+        adv_b = critic_net(tf.expand_dims(states, -1)).numpy().reshape(-1)
+        probs = actor_net(tf.expand_dims(states, -1))
+        indices = tf.transpose(tf.stack([tf.range(probs.shape[0]), actions]))
         probs = tf.gather_nd(
             indices=indices,
             params=probs
         )
         objective = tf.math.log(probs) * (adv_a - adv_b)
-        objectives.append(tf.reduce_mean(tf.reduce_sum(objective)))
 
-        objective = tf.math.log(probs) * (adv_a - adv_b)
-        objective = -tf.math.reduce_sum(objective)
+        objective = - tf.math.reduce_sum(objective)
         grads = actor_tape.gradient(objective, actor_net.trainable_variables)
         actor_optimizer.apply_gradients(zip(grads, actor_net.trainable_variables))
 
@@ -167,10 +161,11 @@ def A2C(actor_net, critic_net, memory_buffer, actor_optimizer, critic_optimizer,
     for _ in range(10):
         # Sample batch
         np.random.shuffle(memory_buffer)
-        states = np.array(list(memory_buffer[:, 0]), dtype=np.float)
-        rewards = np.array(list(memory_buffer[:, 2]), dtype=np.float)
-        next_states = np.array(list(memory_buffer[:, 3]), dtype=np.float)
-        done = np.array(list(memory_buffer[:, 4]), dtype=bool)
+        states = np.vstack(memory_buffer[:, 0])
+        # actions = np.array(memory_buffer[:, 1], dtype=int)
+        next_states = np.vstack(memory_buffer[:, 3])
+        rewards = memory_buffer[:, 2]
+        done = memory_buffer[:, 4]
         # Tape for the critic
         with tf.GradientTape() as critic_tape:
             # Compute the target and the MSE between the current prediction
@@ -194,12 +189,12 @@ class OverrideReward(gymnasium.wrappers.NormalizeReward):
         row, col = s_unpack[observation]
         cell_type = desc[row][col]
         if cell_type == b"H":
-            reward = -100
-        elif observation == MAP_SIZE-1 * MAP_SIZE + MAP_SIZE-1:
-            reward = 100
+            reward = -1
+        elif observation == MAP_SIZE - 1 * MAP_SIZE + MAP_SIZE - 1:
+            reward = 1
         else:
-            # reward = -distances[previous_observation][action] / MAX_DIST
-            reward = 0
+            # reward = -1/(distances[previous_observation][action] / MAX_DIST)
+            reward = -0.01
         return observation, reward, terminated, truncated, info
 
 
@@ -209,7 +204,7 @@ def main():
     print("*                 (DRL in Practice)               *")
     print("***************************************************\n")
 
-    _training_steps = 5000
+    _training_steps = 2500
 
     # Crete the environment and add the wrapper for the custom reward function
     # env = gymnasium.make("FrozenLake-v1", max_episode_steps=100, map_name=f"{MAP_SIZE}x{MAP_SIZE}", is_slippery=False,
